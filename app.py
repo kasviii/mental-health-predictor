@@ -45,9 +45,7 @@ st.markdown("""
 def load_model():
     return joblib.load('mental_health_model.pkl')
 
-@st.cache_resource
-def load_explainer(model):
-    return shap.TreeExplainer(model)
+
 
 @st.cache_data
 def load_features():
@@ -58,7 +56,6 @@ def load_features():
     return feature_names, feature_options
 
 model = load_model()
-explainer = load_explainer(model)
 feature_names, feature_options = load_features()
 
 encoding_maps = {
@@ -210,34 +207,32 @@ if page == "Predict":
 
         # SHAP explanation
         st.divider()
-        st.subheader("Why did the model predict this?")
-        st.markdown("SHAP (SHapley Additive exPlanations) shows which factors pushed the prediction towards or away from treatment.")
+        st.subheader("Why this prediction?")
+        st.markdown("The chart below shows which factors contributed most to this assessment, based on SHAP (SHapley Additive exPlanations) values.")
 
-        shap_values_single = explainer.shap_values(input_df)
-        shap_df = pd.DataFrame({
-            'Feature': [feature_labels[f] for f in feature_names],
-            'SHAP Value': shap_values_single[0],
-        }).sort_values('SHAP Value', key=abs, ascending=True)
+        try:
+            import shap
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(input_df)
 
-        colors = ['#e74c3c' if v > 0 else '#2ecc71' for v in shap_df['SHAP Value']]
-        fig3 = go.Figure(go.Bar(
-            x=shap_df['SHAP Value'],
-            y=shap_df['Feature'],
-            orientation='h',
-            marker_color=colors,
-        ))
-        fig3.update_layout(
-            title="Feature Contribution to Prediction (Red = towards treatment, Green = away from treatment)",
-            height=450,
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            xaxis_title="SHAP Value",
-        )
-        st.plotly_chart(fig3, use_container_width=True)
-
-        st.info("This tool is for educational purposes only and does not constitute medical advice. Please consult a qualified mental health professional for proper diagnosis and treatment.")
-
+            fig3 = go.Figure(go.Bar(
+                x=shap_values[0],
+                y=list(feature_labels.values()),
+                orientation='h',
+                marker_color=['#e74c3c' if v > 0 else '#2ecc71' for v in shap_values[0]]
+            ))
+            fig3.update_layout(
+                title="Feature Contribution to Prediction (SHAP Values)",
+                xaxis_title="Impact on Prediction",
+                height=450,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font_color='white',
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+            st.caption("Red bars push toward Treatment Recommended. Green bars push toward Low Risk.")
+        except Exception as e:
+            st.warning("SHAP explanation unavailable.")
 # ══════════════════════════════════════
 # PAGE 2 — MODEL ANALYSIS
 # ══════════════════════════════════════
