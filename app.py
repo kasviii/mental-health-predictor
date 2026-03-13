@@ -5,11 +5,12 @@ import joblib
 import json
 import plotly.express as px
 import plotly.graph_objects as go
-import os
+import shap
+import matplotlib.pyplot as plt
+import io
 
 st.set_page_config(
     page_title="Mental Health Predictor",
-    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -30,12 +31,23 @@ st.markdown("""
         border: 1px solid #e74c3c;
         text-align: center;
     }
+    .section-header {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #888;
+        margin-bottom: 0.5rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
 def load_model():
     return joblib.load('mental_health_model.pkl')
+
+@st.cache_resource
+def load_explainer(model):
+    return shap.TreeExplainer(model)
 
 @st.cache_data
 def load_features():
@@ -46,6 +58,7 @@ def load_features():
     return feature_names, feature_options
 
 model = load_model()
+explainer = load_explainer(model)
 feature_names, feature_options = load_features()
 
 encoding_maps = {
@@ -65,41 +78,61 @@ encoding_maps = {
     'care_options': {'No': 0, 'Not sure': 1, 'Yes': 2},
 }
 
+feature_labels = {
+    'Gender': 'Gender',
+    'Occupation': 'Occupation',
+    'self_employed': 'Self Employed',
+    'family_history': 'Family History of Mental Health Issues',
+    'Days_Indoors': 'Days Spent Indoors',
+    'Growing_Stress': 'Growing Stress',
+    'Changes_Habits': 'Changes in Habits',
+    'Mental_Health_History': 'Mental Health History',
+    'Mood_Swings': 'Mood Swings',
+    'Coping_Struggles': 'Coping Struggles',
+    'Work_Interest': 'Interest in Work',
+    'Social_Weakness': 'Social Weakness',
+    'mental_health_interview': 'Comfortable Discussing Mental Health at Work',
+    'care_options': 'Aware of Mental Health Care Options',
+}
+
 st.sidebar.title("Mental Health Predictor")
-st.sidebar.markdown("An ML-powered tool to assess mental health treatment likelihood.")
+st.sidebar.markdown("An ML-powered tool to assess mental health treatment likelihood based on lifestyle and psychological indicators.")
 st.sidebar.divider()
 page = st.sidebar.radio("Navigate", ["Predict", "Model Analysis", "About"])
 
+# ══════════════════════════════════════
+# PAGE 1 — PREDICT
+# ══════════════════════════════════════
 if page == "Predict":
     st.title("Mental Health Treatment Predictor")
-    st.markdown("Fill in the details below to assess whether mental health treatment may be beneficial.")
+    st.markdown("Answer the questions below. The model will predict whether mental health treatment may be beneficial and explain the key factors driving that prediction.")
     st.divider()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Personal Information")
-        gender = st.selectbox("Gender", feature_options['Gender'])
-        occupation = st.selectbox("Occupation", feature_options['Occupation'])
-        self_employed = st.selectbox("Self Employed", feature_options['self_employed'])
-        family_history = st.selectbox("Family History of Mental Health Issues", feature_options['family_history'])
-        days_indoors = st.selectbox("Days Spent Indoors", feature_options['Days_Indoors'])
-        growing_stress = st.selectbox("Growing Stress", feature_options['Growing_Stress'])
-        changes_habits = st.selectbox("Changes in Habits", feature_options['Changes_Habits'])
+        st.markdown('<p class="section-header">Personal & Lifestyle</p>', unsafe_allow_html=True)
+        gender = st.selectbox(feature_labels['Gender'], feature_options['Gender'])
+        occupation = st.selectbox(feature_labels['Occupation'], feature_options['Occupation'])
+        self_employed = st.radio(feature_labels['self_employed'], feature_options['self_employed'], horizontal=True)
+        family_history = st.radio(feature_labels['family_history'], feature_options['family_history'], horizontal=True)
+        days_indoors = st.selectbox(feature_labels['Days_Indoors'], feature_options['Days_Indoors'])
+        growing_stress = st.radio(feature_labels['Growing_Stress'], feature_options['Growing_Stress'], horizontal=True)
+        changes_habits = st.radio(feature_labels['Changes_Habits'], feature_options['Changes_Habits'], horizontal=True)
 
     with col2:
-        st.subheader("Mental Health Indicators")
-        mental_health_history = st.selectbox("Mental Health History", feature_options['Mental_Health_History'])
-        mood_swings = st.selectbox("Mood Swings", feature_options['Mood_Swings'])
-        coping_struggles = st.selectbox("Coping Struggles", feature_options['Coping_Struggles'])
-        work_interest = st.selectbox("Interest in Work", feature_options['Work_Interest'])
-        social_weakness = st.selectbox("Social Weakness", feature_options['Social_Weakness'])
-        mental_health_interview = st.selectbox("Would Discuss Mental Health in Interview", feature_options['mental_health_interview'])
-        care_options = st.selectbox("Aware of Care Options", feature_options['care_options'])
+        st.markdown('<p class="section-header">Mental Health Indicators</p>', unsafe_allow_html=True)
+        mental_health_history = st.radio(feature_labels['Mental_Health_History'], feature_options['Mental_Health_History'], horizontal=True)
+        mood_swings = st.select_slider(feature_labels['Mood_Swings'], options=['Low', 'Medium', 'High'])
+        coping_struggles = st.radio(feature_labels['Coping_Struggles'], feature_options['Coping_Struggles'], horizontal=True)
+        work_interest = st.radio(feature_labels['Work_Interest'], feature_options['Work_Interest'], horizontal=True)
+        social_weakness = st.radio(feature_labels['Social_Weakness'], feature_options['Social_Weakness'], horizontal=True)
+        mental_health_interview = st.radio(feature_labels['mental_health_interview'], feature_options['mental_health_interview'], horizontal=True)
+        care_options = st.radio(feature_labels['care_options'], feature_options['care_options'], horizontal=True)
 
     st.divider()
 
-    if st.button("Predict", type="primary", use_container_width=True):
+    if st.button("Run Prediction", type="primary", use_container_width=True):
         input_data = {
             'Gender': encoding_maps['Gender'][gender],
             'Occupation': encoding_maps['Occupation'][occupation],
@@ -175,8 +208,39 @@ if page == "Predict":
             )
             st.plotly_chart(fig2, use_container_width=True)
 
+        # SHAP explanation
+        st.divider()
+        st.subheader("Why did the model predict this?")
+        st.markdown("SHAP (SHapley Additive exPlanations) shows which factors pushed the prediction towards or away from treatment.")
+
+        shap_values_single = explainer.shap_values(input_df)
+        shap_df = pd.DataFrame({
+            'Feature': [feature_labels[f] for f in feature_names],
+            'SHAP Value': shap_values_single[0],
+        }).sort_values('SHAP Value', key=abs, ascending=True)
+
+        colors = ['#e74c3c' if v > 0 else '#2ecc71' for v in shap_df['SHAP Value']]
+        fig3 = go.Figure(go.Bar(
+            x=shap_df['SHAP Value'],
+            y=shap_df['Feature'],
+            orientation='h',
+            marker_color=colors,
+        ))
+        fig3.update_layout(
+            title="Feature Contribution to Prediction (Red = towards treatment, Green = away from treatment)",
+            height=450,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font_color='white',
+            xaxis_title="SHAP Value",
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
         st.info("This tool is for educational purposes only and does not constitute medical advice. Please consult a qualified mental health professional for proper diagnosis and treatment.")
 
+# ══════════════════════════════════════
+# PAGE 2 — MODEL ANALYSIS
+# ══════════════════════════════════════
 elif page == "Model Analysis":
     st.title("Model Analysis")
     st.markdown("Performance metrics and visualizations for all trained models.")
@@ -184,12 +248,12 @@ elif page == "Model Analysis":
 
     st.subheader("Model Performance Comparison")
     metrics_data = {
-        'Model': ['Logistic Regression', 'Decision Tree', 'Random Forest', 'Gradient Boosting', 'KNN'],
-        'Accuracy': [0.6909, 0.6886, 0.6905, 0.7146, 0.6498],
-        'Precision': [0.6910, 0.6805, 0.6766, 0.7014, 0.6509],
-        'Recall': [0.7035, 0.7247, 0.7433, 0.7587, 0.6635],
-        'F1': [0.6972, 0.7019, 0.7084, 0.7289, 0.6571],
-        'ROC-AUC': [0.7517, 0.7161, 0.7192, 0.7729, 0.6867],
+        'Model': ['Logistic Regression', 'Decision Tree', 'Random Forest', 'Gradient Boosting', 'KNN', 'XGBoost'],
+        'Accuracy': [0.6909, 0.6886, 0.6905, 0.7146, 0.6498, 0.7139],
+        'Precision': [0.6910, 0.6805, 0.6766, 0.7014, 0.6509, 0.7014],
+        'Recall': [0.7035, 0.7247, 0.7433, 0.7587, 0.6635, 0.7314],
+        'F1': [0.6972, 0.7019, 0.7084, 0.7289, 0.6571, 0.7314],
+        'ROC-AUC': [0.7517, 0.7161, 0.7192, 0.7729, 0.6867, 0.7694],
     }
     metrics_df = pd.DataFrame(metrics_data)
     st.dataframe(metrics_df.style.highlight_max(axis=0, color='#2ecc71'), use_container_width=True)
@@ -204,41 +268,56 @@ elif page == "Model Analysis":
         st.subheader("ROC Curves")
         st.image('plots/roc_curves.png', use_container_width=True)
 
+    st.subheader("SHAP Feature Importance (Global)")
+    col3, col4 = st.columns(2)
+    with col3:
+        st.image('plots/shap_summary.png', use_container_width=True)
+    with col4:
+        st.image('plots/shap_bar.png', use_container_width=True)
+
     st.subheader("Feature Importance")
     st.image('plots/feature_importance.png', use_container_width=True)
 
     st.subheader("Model Comparison")
     st.image('plots/model_comparison.png', use_container_width=True)
 
+# ══════════════════════════════════════
+# PAGE 3 — ABOUT
+# ══════════════════════════════════════
 elif page == "About":
     st.title("About This Project")
     st.divider()
 
     st.markdown("""
     ## Mental Health Treatment Predictor
-    
-    This project uses machine learning to predict whether an individual may benefit from 
+
+    This project uses machine learning to predict whether an individual may benefit from
     mental health treatment based on lifestyle, occupational, and psychological indicators.
-    
+
     ## Dataset
     - **Source:** Kaggle — Mental Health Dataset
     - **Size:** 292,364 records
     - **Features:** 14 features including gender, occupation, stress indicators, and mental health history
     - **Target:** Whether the individual sought mental health treatment (Yes/No)
-    
+
     ## Models Trained
     - Logistic Regression
     - Decision Tree
     - Random Forest
     - Gradient Boosting (Best Model — 71.5% accuracy, 0.773 ROC-AUC)
     - K-Nearest Neighbors
-    
+    - XGBoost
+
+    ## Explainability
+    This app uses SHAP (SHapley Additive exPlanations) to explain individual predictions,
+    showing which features contributed most to each prediction and in which direction.
+
     ## Tech Stack
-    - Python, Scikit-learn, Pandas, NumPy
+    - Python, Scikit-learn, XGBoost, SHAP, Pandas, NumPy
     - Streamlit, Plotly
     - Deployed on Streamlit Community Cloud
-    
+
     ## Disclaimer
-    This tool is for educational purposes only. It does not constitute medical advice. 
+    This tool is for educational purposes only. It does not constitute medical advice.
     Always consult a qualified mental health professional for diagnosis and treatment.
     """)
