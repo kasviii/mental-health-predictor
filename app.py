@@ -5,7 +5,6 @@ import joblib
 import json
 import plotly.express as px
 import plotly.graph_objects as go
-from PIL import Image
 import os
 
 st.set_page_config(
@@ -15,24 +14,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── Custom CSS ──
 st.markdown("""
 <style>
-    .main { background-color: #0f1117; }
-    .stApp { background-color: #0f1117; }
-    .metric-card {
-        background: linear-gradient(135deg, #1e2130, #2d3250);
-        border-radius: 12px;
-        padding: 20px;
-        border: 1px solid #3d4470;
-        text-align: center;
-    }
-    .predict-card {
-        background: linear-gradient(135deg, #1a1f35, #252b45);
-        border-radius: 16px;
-        padding: 30px;
-        border: 1px solid #3d4470;
-    }
     .result-positive {
         background: linear-gradient(135deg, #1a3a2a, #1e4d35);
         border-radius: 12px;
@@ -50,7 +33,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Load model and data ──
 @st.cache_resource
 def load_model():
     return joblib.load('mental_health_model.pkl')
@@ -66,7 +48,6 @@ def load_features():
 model = load_model()
 feature_names, feature_options = load_features()
 
-# ── Encoding maps ──
 encoding_maps = {
     'Gender': {'Female': 0, 'Male': 1},
     'Occupation': {'Business': 0, 'Corporate': 1, 'Housewife': 2, 'Others': 3, 'Student': 4},
@@ -84,18 +65,13 @@ encoding_maps = {
     'care_options': {'No': 0, 'Not sure': 1, 'Yes': 2},
 }
 
-# ── Sidebar ──
-st.sidebar.image("https://img.icons8.com/fluency/96/brain.png", width=80)
-st.sidebar.title("🧠 Mental Health Predictor")
+st.sidebar.title("Mental Health Predictor")
 st.sidebar.markdown("An ML-powered tool to assess mental health treatment likelihood.")
 st.sidebar.divider()
-page = st.sidebar.radio("Navigate", ["🔮 Predict", "📊 Model Analysis", "ℹ️ About"])
+page = st.sidebar.radio("Navigate", ["Predict", "Model Analysis", "About"])
 
-# ══════════════════════════════════════
-# PAGE 1 — PREDICT
-# ══════════════════════════════════════
-if page == "🔮 Predict":
-    st.title("🔮 Mental Health Treatment Predictor")
+if page == "Predict":
+    st.title("Mental Health Treatment Predictor")
     st.markdown("Fill in the details below to assess whether mental health treatment may be beneficial.")
     st.divider()
 
@@ -123,8 +99,7 @@ if page == "🔮 Predict":
 
     st.divider()
 
-    if st.button("🔮 Predict", type="primary", use_container_width=True):
-        # Encode inputs
+    if st.button("Predict", type="primary", use_container_width=True):
         input_data = {
             'Gender': encoding_maps['Gender'][gender],
             'Occupation': encoding_maps['Occupation'][occupation],
@@ -153,14 +128,14 @@ if page == "🔮 Predict":
             if prediction == 1:
                 st.markdown("""
                 <div class="result-negative">
-                    <h2>⚠️ Treatment Recommended</h2>
+                    <h2>Treatment Recommended</h2>
                     <p>Based on your responses, seeking mental health support may be beneficial.</p>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("""
                 <div class="result-positive">
-                    <h2>✅ Low Risk</h2>
+                    <h2>Low Risk</h2>
                     <p>Based on your responses, your mental health indicators appear stable.</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -169,7 +144,7 @@ if page == "🔮 Predict":
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=round(probability[1]*100, 1),
-                title={'text': "Treatment Probability %"},
+                title={'text': "Treatment Probability (%)"},
                 gauge={
                     'axis': {'range': [0, 100]},
                     'bar': {'color': "#e74c3c" if probability[1] > 0.5 else "#2ecc71"},
@@ -200,17 +175,13 @@ if page == "🔮 Predict":
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-        st.info("⚠️ This tool is for educational purposes only and does not constitute medical advice. Please consult a qualified mental health professional for proper diagnosis and treatment.")
+        st.info("This tool is for educational purposes only and does not constitute medical advice. Please consult a qualified mental health professional for proper diagnosis and treatment.")
 
-# ══════════════════════════════════════
-# PAGE 2 — MODEL ANALYSIS
-# ══════════════════════════════════════
-elif page == "📊 Model Analysis":
-    st.title("📊 Model Analysis")
+elif page == "Model Analysis":
+    st.title("Model Analysis")
     st.markdown("Performance metrics and visualizations for all trained models.")
     st.divider()
 
-    # Metrics
     st.subheader("Model Performance Comparison")
     metrics_data = {
         'Model': ['Logistic Regression', 'Decision Tree', 'Random Forest', 'Gradient Boosting', 'KNN'],
@@ -239,38 +210,35 @@ elif page == "📊 Model Analysis":
     st.subheader("Model Comparison")
     st.image('plots/model_comparison.png', use_container_width=True)
 
-# ══════════════════════════════════════
-# PAGE 3 — ABOUT
-# ══════════════════════════════════════
-elif page == "ℹ️ About":
-    st.title("ℹ️ About This Project")
+elif page == "About":
+    st.title("About This Project")
     st.divider()
 
     st.markdown("""
-    ## 🧠 Mental Health Treatment Predictor
+    ## Mental Health Treatment Predictor
     
     This project uses machine learning to predict whether an individual may benefit from 
     mental health treatment based on lifestyle, occupational, and psychological indicators.
     
-    ## 📊 Dataset
+    ## Dataset
     - **Source:** Kaggle — Mental Health Dataset
     - **Size:** 292,364 records
     - **Features:** 14 features including gender, occupation, stress indicators, and mental health history
     - **Target:** Whether the individual sought mental health treatment (Yes/No)
     
-    ## 🤖 Models Trained
+    ## Models Trained
     - Logistic Regression
     - Decision Tree
     - Random Forest
-    - Gradient Boosting *(Best Model — 71.5% accuracy, 0.773 ROC-AUC)*
+    - Gradient Boosting (Best Model — 71.5% accuracy, 0.773 ROC-AUC)
     - K-Nearest Neighbors
     
-    ## 🛠️ Tech Stack
+    ## Tech Stack
     - Python, Scikit-learn, Pandas, NumPy
     - Streamlit, Plotly
     - Deployed on Streamlit Community Cloud
     
-    ## ⚠️ Disclaimer
-    This tool is for **educational purposes only**. It does not constitute medical advice. 
+    ## Disclaimer
+    This tool is for educational purposes only. It does not constitute medical advice. 
     Always consult a qualified mental health professional for diagnosis and treatment.
     """)
